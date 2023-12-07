@@ -1,4 +1,5 @@
 from flask import request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 from mysql_connection import get_connection
 from mysql.connector import Error
@@ -12,11 +13,21 @@ from mysql.connector import Error
 class RecipeListResource(Resource):
 
     #http Method 와 동일한 함수명으로 오버라이딩
+    # jwt토큰이 헤더에 필수로 있어야 한다는 뜻!
+    # 토큰이 없으면 이 API 실행이 안된다.
+    @jwt_required()
     def post(self):
         
         # 1. 클라이언트가 보내준 데이터가 있으면 
         #    그 데이터를 먼저 받아준다
         data = request.get_json()
+        
+        # 1-1. 헤더에 JWT토큰이 있으면 토큰정보도 받아준다
+        # 아래 함수는 토큰에서 토큰 만들때 사용한 데이터를 
+        # 복호화 해서 바로 가져다준다
+        # 유저테이블의 id로 암호화 했으니
+        # 복호화하면 다시 유저 아이디로 받아올 수 있다.
+        user_id=get_jwt_identity()
 
         print(data)
 
@@ -28,15 +39,18 @@ class RecipeListResource(Resource):
 
             # 2.2 쿼리문 만들기 - insert 쿼리문 만들기
             query ='''insert into recipe
-                        (name, description,num_of_servings, cook_time, direction)
+                        (name, description,num_of_servings, cook_time, direction,user_id)
                         values
-                        (%s,%s,%s,%s,%s);'''
+                        (%s,%s,%s,%s,%s,%s);'''
             # 2.3 위의 쿼리에 매칭되는 변수를 처리해준다.
             #       단, 라이브러리특성상 튜플로 만들어야한다.
             record = (data['name'],data['description'],data['num_of_servings'],
-                      data['cook_time'],data['direction'])
+                      data['cook_time'],data['direction'],user_id)
             
-            # 2.4 커서를 가져온다.
+            # 2.4 커서를 가져온다.(cursor: 하나의 DB connection에 대하여 독립적으로 SQL 문을 실행할 수 있는 작업환경을 제공하는 객체.
+            #                            하나의 connection에 동시에 한개의 cursor만 생성가능
+            #                            cursor를 통해서 SQL 문을 실행할 수 있으며, 응용 프로그램이 실행결과를 투플 단위로 접근할 수 있도록함.)
+            
             cursor = connection.cursor()
 
             # 2.5 위의 쿼리문을 커서로 실행한다
@@ -122,7 +136,7 @@ class RecipeResource(Resource):
 
         print(recipe_id)
 
-        # 1. 클라이언트로 부터 데이터를 받아논다.
+        # 1. 클라이언트로 부터 데이터를 받아온다.
         #    이미 경로에 들어있는 ,레시피 아이디를 받아왔다
         #    위의 recipe_id라는 변수에 이미있다.
 
@@ -290,4 +304,44 @@ class RecipePublishResource(Resource):
             return {"result":"fail","error": str(e)},500
     
         return {'result':'success'} ,200
-    
+
+
+ ######   
+class RecipeMeResource(Resource):
+
+    @jwt_required()
+    def get(self):
+
+        user_id=get_jwt_identity()
+
+        print(user_id)
+        
+        try:
+            connection = get_connection()
+            query = '''select*
+                        from recipe
+                        where user_id = %s;'''
+            record =(user_id,)
+            
+            cursor=connection.cursor(dictionary= True)
+            cursor.execute(query,record)
+            result_list=cursor.fetchall()
+
+            i =0
+            for row in result_list:
+                result_list[i]['created_at']=row['created_at'].isoformat()
+                result_list[i]['updated_at']=row['updated_at'].isoformat()
+                i = i + 1
+
+            cursor.close()
+            connection.close()
+
+        except Error as e:
+            print(e)
+            cursor.close()
+            connection.close()
+            return{'erroe':str(e)},500
+
+        return{'result':'success',
+               'items':result_list,
+               'count':len(result_list)},200
