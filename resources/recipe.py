@@ -132,6 +132,7 @@ class RecipeResource(Resource):
     # Path(경로)에 숫자나 문자가 바뀌면서 처리되는 경우에는 
     # 해당 변수를, 파라미터에 꼭 써줘야한다.
     # 이변수는 app.py파일의 addResource함수에 사용한 변수
+
     def get(self,recipe_id):
 
         print(recipe_id)
@@ -178,7 +179,8 @@ class RecipeResource(Resource):
             return {"result":"fail","message":"해당데이터가 없습니다."},400 
         else:
             return{'result':'success','item':result_list[0]}
-    
+        
+    @jwt_required()
     def put(self,recipe_id):
 
         
@@ -186,6 +188,7 @@ class RecipeResource(Resource):
         # body에 들어있는 json데이터
         data = request.get_json()
         
+        user_id = get_jwt_identity()
         # 레시피 테이블의 앙이디가 저장되어있는 변수 : recipe_id
         
         # 2. DB 레시피 테이블을 업데이트 한다.
@@ -199,9 +202,9 @@ class RecipeResource(Resource):
                         num_of_servings = %s,
                         cook_time = %s,
                         direction = %s
-                        where id = %s;'''
+                        where id = %s and user_id = %s;'''
             record = (data['name'],data['description'],data['num_of_servings'],
-                      data['cook_time'],data['direction'],recipe_id)
+                      data['cook_time'],data['direction'],recipe_id,user_id)
             
             
             cursor = connection.cursor()
@@ -221,17 +224,19 @@ class RecipeResource(Resource):
     
     ### restful API에서
     ### GET, DELETE 메소드는 BODY에 데이터를 전달하지 않습니다.
+    @jwt_required()
     def delete(self,recipe_id):
 
         # 1. 클라이언트로부터 데이터를 받아온다
         #    이미 recipe_id 받아왔음!!
+        user_id = get_jwt_identity()
 
         # 2. 테이블에서 해당레시피를 삭제한다.
         try:
             connection = get_connection()
             query ='''delete from recipe
-                        where id = %s'''
-            record = (recipe_id,)
+                        where id = %s and user_id=%s;'''
+            record = (recipe_id,user_id)
 
             cursor = connection.cursor()
             cursor.execute(query,record)
