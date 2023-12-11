@@ -280,6 +280,8 @@ class RecipePublishResource(Resource):
             cursor.close()
             connection.close()
             return {"result":"fail","error": str(e)},500
+        if recipe_id == id:
+            return{'error':'본인을 친구추가 할수없습니다'},500
     
         return {'result':'success'} ,200
     
